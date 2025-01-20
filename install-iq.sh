@@ -2,7 +2,7 @@
 
 # Variables
 JAVA_VERSION="17" # As of this writing, Nexus IQ server requires Java 17 to run
-JAVA_PATH="/usr/lib/jvm/jdk-17/bin/java" # Specify absolute path to Java executable here. If not defined, will attempt to locate an instance.
+JAVA_PATH="" # Specify absolute path to Java executable here. If not defined, will attempt to locate an instance.
 NEXUS_IQ_URL="https://download.sonatype.com/clm/server/latest.tar.gz"
 INSTALL_DIR="/opt/sonatype/nexus/iq"
 NEXUS_USER="nexus"
