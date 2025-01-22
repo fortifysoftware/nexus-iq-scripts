@@ -6,11 +6,17 @@ JAVA_PATH="" # Specify absolute path to Java executable here. If not defined, wi
 NEXUS_IQ_URL="https://download.sonatype.com/clm/server/latest.tar.gz"
 INSTALL_DIR="/opt/sonatype/nexus/iq"
 NEXUS_USER="nexus"
-NEXUS_HOME="/home/nexus/iq"
+NEXUS_HOME="/home/$NEXUS_USER"
+NEXUS_IQ_WORK_DIR="$NEXUS_HOME/iq"
 LOG_FILE="/var/log/nexus-iq.log"
 SERVICE_NAME="nexus-iq"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 CONFIG_FILE="config.yml"
+
+# If you need to specify a proxy server to reach external sites,
+# please uncomment the below and specify the appropriate proxy server.
+# export http_proxy="http://user:pwd@127.0.0.1:1234"
+# export https_proxy="http://user:pwd@127.0.0.1:1234"
 
 # Ensure the script is run as root
 if [[ $EUID -ne 0 ]]; then
@@ -18,25 +24,30 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Check for Java 17
+# Check for Java 17 if JAVA_PATH not predefined
 if [[ -z $JAVA_PATH ]]; then
     echo "Checking for Java $JAVA_VERSION..."
-    JAVA_PATH=$(update-alternatives --list java | grep "$JAVA_VERSION" | head -n 1)
-    if [[ -z $JAVA_PATH ]]; then
-        JAVA_PATH=$(command -v java)
-        if [[ -n $JAVA_PATH ]]; then
-            JAVA_VERSION_CHECK=$("$JAVA_PATH" -version 2>&1 | grep "version" | grep "$JAVA_VERSION")
-            if [[ -z $JAVA_VERSION_CHECK ]]; then
-                JAVA_PATH=""
-            fi
-        fi
-    fi
+    JAVA_PATH=$(find /usr/lib/jvm/ -maxdepth 1 -type d -o -type l -name "*$JAVA_VERSION*" -exec find -L {} -type f -executable -name "java" \; -quit)
+fi
+
+# Check if JAVA_PATH is accidentally set to a directory
+if [ -d $JAVA_PATH ]; then
+    echo "JAVA_PATH is accidentally set to a directory. Assuming it is the directory containing Java $JAVA_VERSION. Searching for java executable..."
+    JAVA_PATH=$(find -L $JAVA_PATH -type f -executable -name "java" -print -quit)
 fi
 
 # Verify Java path
-if [[ -z $JAVA_PATH || ! -x $JAVA_PATH ]]; then
-    echo "Java $JAVA_VERSION not found or not executable. Please install Java $JAVA_VERSION or specify its path at the top of the script."
+if [[ -z "$JAVA_PATH" || ! ( -f "$JAVA_PATH" && -x "$JAVA_PATH" ) ]]; then
+    echo "Java $JAVA_VERSION not found or not executable."
+    echo "Please install Java $JAVA_VERSION or specify the absolute path to the java executable in the JAVA_PATH variable."
     exit 1
+fi
+
+# Verify Java version
+JAVA_INSTALLED_VERSION=$($JAVA_PATH -version 2>&1 | grep -P -o -m1 '(?<=version \")[0-9]+')
+if [ "$JAVA_INSTALLED_VERSION" != "$JAVA_VERSION" ]; then
+  echo "Incorrect Java version found. Please install Java $JAVA_VERSION. Exiting..."
+  exit 1
 fi
 
 echo "Using Java path: $JAVA_PATH"
@@ -65,7 +76,7 @@ rm -f "$INSTALL_DIR/latest.tar.gz"
 # Check for and create nexus user
 if ! id "$NEXUS_USER" &>/dev/null; then
     echo "Creating system user '$NEXUS_USER'..."
-    useradd -r -m -s /sbin/nologin -c "Sonatype Nexus system (non-login) account" "$NEXUS_USER"
+    useradd -r -m -s /sbin/nologin -d $NEXUS_HOME -c "Sonatype Nexus system (non-login) account" "$NEXUS_USER"
 fi
 
 # Add current user to nexus group
@@ -73,18 +84,18 @@ echo "Adding the current user to the $NEXUS_USER group..."
 usermod -aG "$NEXUS_USER" "$(logname)"
 
 # Create necessary directories
-echo "Creating necessary directories under $NEXUS_HOME..."
-mkdir -p "$NEXUS_HOME/conf" "$NEXUS_HOME/log" "$NEXUS_HOME/work"
-chown -R "$NEXUS_USER":"$NEXUS_USER" "$NEXUS_HOME"
+echo "Creating necessary directories under $NEXUS_IQ_WORK_DIR..."
+mkdir -p "$NEXUS_IQ_WORK_DIR/conf" "$NEXUS_IQ_WORK_DIR/log" "$NEXUS_IQ_WORK_DIR/work"
+chown -R "$NEXUS_USER":"$NEXUS_USER" "$NEXUS_IQ_WORK_DIR"
 
-# Move config.yml to /home/nexus/iq/conf/
-echo "Moving $CONFIG_FILE to $NEXUS_HOME/conf..."
-mv "$INSTALL_DIR/$CONFIG_FILE" "$NEXUS_HOME/conf/"
-chown "$NEXUS_USER":"$NEXUS_USER" "$NEXUS_HOME/conf/$CONFIG_FILE"
+# Move config.yml to NEXUS_IQ_WORK_DIR/conf
+echo "Moving $CONFIG_FILE to $NEXUS_IQ_WORK_DIR/conf..."
+mv "$INSTALL_DIR/$CONFIG_FILE" "$NEXUS_IQ_WORK_DIR/conf/"
+chown "$NEXUS_USER":"$NEXUS_USER" "$NEXUS_IQ_WORK_DIR/conf/$CONFIG_FILE"
 
 # Update paths in config.yml
 echo "Updating paths in config.yml..."
-sed -i 's#/sonatype-work#/work#g' "$NEXUS_HOME/conf/$CONFIG_FILE"
+sed -i 's#/sonatype-work#/work#g' "$NEXUS_IQ_WORK_DIR/conf/$CONFIG_FILE"
 
 # Determine jar file name
 JAR_FILE=$(find "$INSTALL_DIR" -name "nexus-iq-server-*.jar" -type f -print -quit)
@@ -103,7 +114,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$NEXUS_HOME
+WorkingDirectory=$NEXUS_IQ_WORK_DIR
 ExecStart=$JAVA_PATH -Xmx10G -jar $INSTALL_DIR/$JAR_NAME server conf/config.yml
 StandardOutput=append:$LOG_FILE
 StandardError=append:$LOG_FILE
@@ -126,12 +137,17 @@ systemctl enable nexus-iq
 
 # Final messages
 echo -e "\n✅ Nexus IQ Server installation is complete! 🍻\n"
-echo "❗IMPORTANT❗"
+echo -e "❗\e[1mIMPORTANT\e[0m❗"
 echo "  ‾‾‾‾‾‾‾‾‾"
-echo "• Please configure the file $NEXUS_HOME/conf/$CONFIG_FILE before starting the service."
-echo "• Note that the default HTTP port is 8070."
-echo "• To start the service after configuring $CONFIG_FILE, run: sudo systemctl start $SERVICE_NAME"
+echo "• Please configure the file $NEXUS_IQ_WORK_DIR/conf/$CONFIG_FILE before starting the service."
+echo -e "• Note that the default HTTP port is \e[1;34m8070\e[0m."
+echo "• The server is configured by default with an inbuilt H2 database which is not recommended"
+echo "  for enterprise deployments. Enterprise self-hosted deployments need to use an external"
+echo "  PostgreSQL database. For configuration details, please refer to:"
+echo "  https://help.sonatype.com/en/external-database-configuration.html"
+echo "• To start the service after configuring $CONFIG_FILE, run:"
+echo -e "  \e[1;32msudo\e[0m \e[1;34msystemctl start $SERVICE_NAME\e[0m"
 echo "• Standard output (including standard error) can be found at $LOG_FILE"
-echo "• Server logs can be found under $NEXUS_HOME/log"
-echo "• The default username is: admin"
-echo "• The default password is: admin123"
+echo "• Server logs can be found under $NEXUS_IQ_WORK_DIR/log"
+echo -e "• The default username is: \e[1;31madmin\e[0m"
+echo -e "• The default password is: \e[1;31madmin123\e[0m"
