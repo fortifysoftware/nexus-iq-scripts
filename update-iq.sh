@@ -81,3 +81,6 @@ systemctl daemon-reload
 # Start the service
 echo "Starting Nexus IQ service..."
 systemctl start nexus-iq
+
+# Final message
+echo "✅ Update complete!"
