@@ -91,9 +91,11 @@ mkdir -p "$NEXUS_IQ_WORK_DIR/conf" "$NEXUS_IQ_WORK_DIR/log" "$NEXUS_IQ_WORK_DIR/
 echo "Moving $CONFIG_FILE to $NEXUS_IQ_WORK_DIR/conf..."
 mv "$INSTALL_DIR/$CONFIG_FILE" "$NEXUS_IQ_WORK_DIR/conf/"
 
-# Change ownership to NEXUS_USER
+# Change ownership
 echo "Changing ownership of $NEXUS_IQ_WORK_DIR to $NEXUS_USER..."
 chown -R "$NEXUS_USER":"$NEXUS_USER" "$NEXUS_IQ_WORK_DIR"
+echo "Changing ownership of $INSTALL_DIR to root..."
+chown -R root:root "$INSTALL_DIR"
 
 # Update paths in config.yml
 echo "Updating paths in config.yml..."
