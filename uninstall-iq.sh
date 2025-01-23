@@ -3,7 +3,6 @@
 # Variables
 INSTALL_DIR="/opt/sonatype/nexus/iq"
 NEXUS_USER="nexus"
-NEXUS_HOME="/home/nexus/iq"
 LOG_FILE="/var/log/nexus-iq.log"
 SERVICE_NAME="nexus-iq"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
