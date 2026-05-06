@@ -29,7 +29,8 @@ fi
 # Determine redirected download URL and new version
 echo "Looking up latest version of Nexus IQ..."
 DOWNLOAD_URL=$(curl -v "$LATEST_URL" 2>&1 | grep -P -o -m1 '(?<=[lL]ocation: )https:[-\./0-9a-zA-Z]+\.tar\.gz')
-NEWVERSION=$(echo $DOWNLOAD_URL | grep -P -o '(?<=server-1\.)[0-9]+')
+FILENAME=$(basename "$DOWNLOAD_URL")
+NEWVERSION=$(echo $FILENAME | grep -P -o '(?<=server-1\.)[0-9]+')
 if [ -z "${NEWVERSION}" ]
 then
     echo "Unable to determine the latest version from the download URL. Exiting..."
@@ -53,23 +54,22 @@ rm $OLDJAR
 
 # Download the latest version of Nexus IQ server
 echo "Downloading latest version..."
-curl -O --output-dir "$INSTALL_DIR" "$DOWNLOAD_URL"
+curl "$DOWNLOAD_URL" -o "$INSTALL_DIR/$FILENAME"
 
 # Extract the jar file
 echo "Extracting latest jar file..."
-FILENAME=$(find $INSTALL_DIR -name "*.tar.gz")
-tar xzf $FILENAME -C $INSTALL_DIR --wildcards nexus-iq-server*.jar
+tar xzf $INSTALL_DIR/$FILENAME -C $INSTALL_DIR --wildcards nexus-iq-server*.jar
 
 # Remove the .tar.gz file
-echo Removing $FILENAME
-rm $FILENAME
+echo "Removing $FILENAME"
+rm $INSTALL_DIR/$FILENAME
 
 # Update ownership on new .jar file
-echo Updating ownership on new jar file...
+echo "Updating ownership on new jar file..."
 chown -R root:root "$INSTALL_DIR"
 
 # Update the service file
-echo Updating service file...
+echo "Updating service file..."
 OLDJAR=$(echo $OLDJAR | xargs -n 1 basename)
 NEWJAR=$(find $INSTALL_DIR -name "nexus-iq*" | xargs -n 1 basename)
 sed -i "s/$OLDJAR/$NEWJAR/" "$SERVICE_FILE"
