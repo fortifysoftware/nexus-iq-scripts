@@ -30,8 +30,12 @@ echo "Deleting the user $NEXUS_USER and its home directory..."
 userdel -r "$NEXUS_USER"
 
 # Remove standard output log
-echo "Deleting $LOG_FILE..."
-rm "$LOG_FILE"
+if [[ -f "$LOG_FILE" ]]; then
+    echo "Deleting $LOG_FILE..."
+    rm "$LOG_FILE"
+else
+    echo "Log file ($LOG_FILE) does not exist."
+fi
 
 # Remove service file
 echo "Deleting the service file..."
